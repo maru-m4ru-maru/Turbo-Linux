@@ -2,14 +2,18 @@
 🚨注意🚨
 Linux**風**であり、本物のLinuxではありません！
 
-## TurboOS CMS
-`turbo-os-cms-v2.js` は TurboWarp のステージを仮想ディスプレイとして使う UI エンジンです。
+## TurboOS
+`turbo-os-cms-v2.js` は現在、TurboWarp の**ステージを仮想ディスプレイ**として使う TurboOS のコア実装です。
 
-### できること
-- テキスト・四角形・ボタン・入力欄・ウィンドウをステージ上に描画
-- x / y / 幅 / 高さ / 色 / 角丸をブロックから設定
-- UIにIDを付けて表示・非表示・削除・最前面化
-- ボタンのクリック判定、入力欄の値取得、UIマウス座標取得
-- OSの起動・終了・再起動
+### 現在の構成
+- UIをScratchブロックから個別に作るCMS方式は廃止
+- TurboWarpのステージへOS画面を直接描画
+- OSの起動・再起動・終了
+- OS内部の状態をフレーム単位で進行
+- `OSを1f進める` ブロックでOSを正確に1フレーム進められる
+- OSの状態と現在のフレーム数を取得
 
-TurboOS CMS v2 は Unsandboxed の TurboWarp カスタム拡張機能として動作します。
+### 起動の流れ
+`OSを起動` → `OSを1f進める` を繰り返すことで、Firmware → Kernel → Services → Desktop とOSが進みます。
+
+TurboOS は Unsandboxed の TurboWarp カスタム拡張機能として動作します。
