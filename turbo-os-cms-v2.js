@@ -2,23 +2,19 @@
     'use strict';
 
     if (!Scratch.extensions.unsandboxed) {
-        throw new Error('TurboOS CMS v2 requires an Unsandboxed extension.');
+        throw new Error('TurboOS requires an Unsandboxed extension.');
     }
 
-    class TurboOSCMSv2 {
+    class TurboOS {
         constructor() {
             this.running = false;
+            this.state = 'off';
+            this.frame = 0;
             this.background = '#101827';
-            this.ui = new Map();
-            this.nextId = 1;
-            this.lastUI = '';
-            this.lastClicked = '';
-            this.lastX = 0;
-            this.lastY = 0;
-            this.inputElements = new Map();
 
             this.stageWidth = 480;
             this.stageHeight = 360;
+
             this.stageCanvas = null;
             this.overlay = null;
             this.canvas = null;
@@ -28,89 +24,74 @@
 
             this.installStyles();
             this.ensureOverlay();
-            this.startLoop();
+            this.startRenderLoop();
         }
 
         getInfo() {
             return {
-                id: 'turbooscmsv2',
-                name: 'TurboOS CMS v2',
+                id: 'turboos',
+                name: 'TurboOS',
                 color1: '#2563eb',
                 color2: '#1d4ed8',
                 color3: '#1e3a8a',
                 blocks: [
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'startOS', text: 'OSを起動' },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'shutdown', text: 'OSを終了' },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'restart', text: 'OSを再起動' },
+                    {
+                        blockType: Scratch.BlockType.COMMAND,
+                        opcode: 'startOS',
+                        text: 'OSを起動'
+                    },
+                    {
+                        blockType: Scratch.BlockType.COMMAND,
+                        opcode: 'stepFrame',
+                        text: 'OSを1f進める'
+                    },
+                    {
+                        blockType: Scratch.BlockType.COMMAND,
+                        opcode: 'restart',
+                        text: 'OSを再起動'
+                    },
+                    {
+                        blockType: Scratch.BlockType.COMMAND,
+                        opcode: 'shutdown',
+                        text: 'OSを終了'
+                    },
                     '---',
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'clear', text: '画面をクリア' },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'setBackground', text: '背景を [COLOR] にする', arguments: { COLOR: { type: Scratch.ArgumentType.COLOR, defaultValue: '#101827' } } },
-                    '---',
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'addText', text: 'テキスト [TEXT] x [X] y [Y] サイズ [SIZE] で作る', arguments: {
-                        TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'TurboOS' },
-                        X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }, Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
-                        SIZE: { type: Scratch.ArgumentType.NUMBER, defaultValue: 24 }
-                    } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'addRect', text: '四角形 x [X] y [Y] 幅 [W] 高さ [H] 角を [ROUND] にする', arguments: {
-                        X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }, Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
-                        W: { type: Scratch.ArgumentType.NUMBER, defaultValue: 120 }, H: { type: Scratch.ArgumentType.NUMBER, defaultValue: 60 },
-                        ROUND: { type: Scratch.ArgumentType.STRING, menu: 'cornerMenu' }
-                    } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'addButton', text: 'ボタン [TEXT] x [X] y [Y] 幅 [W] 高さ [H] 角を [ROUND] にする', arguments: {
-                        TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'OK' },
-                        X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }, Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
-                        W: { type: Scratch.ArgumentType.NUMBER, defaultValue: 100 }, H: { type: Scratch.ArgumentType.NUMBER, defaultValue: 36 },
-                        ROUND: { type: Scratch.ArgumentType.STRING, menu: 'cornerMenu' }
-                    } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'addInput', text: '入力欄 x [X] y [Y] 幅 [W] 高さ [H] 角を [ROUND] にする', arguments: {
-                        X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }, Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
-                        W: { type: Scratch.ArgumentType.NUMBER, defaultValue: 160 }, H: { type: Scratch.ArgumentType.NUMBER, defaultValue: 34 },
-                        ROUND: { type: Scratch.ArgumentType.STRING, menu: 'cornerMenu' }
-                    } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'addWindow', text: 'ウィンドウ [TITLE] x [X] y [Y] 幅 [W] 高さ [H] 角を [ROUND] にする', arguments: {
-                        TITLE: { type: Scratch.ArgumentType.STRING, defaultValue: 'Window' },
-                        X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }, Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 20 },
-                        W: { type: Scratch.ArgumentType.NUMBER, defaultValue: 300 }, H: { type: Scratch.ArgumentType.NUMBER, defaultValue: 180 },
-                        ROUND: { type: Scratch.ArgumentType.STRING, menu: 'cornerMenu' }
-                    } },
-                    '---',
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'setText', text: '最後のUIの文字を [TEXT] にする', arguments: { TEXT: { type: Scratch.ArgumentType.STRING, defaultValue: 'Hello' } } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'setPosition', text: '最後のUIを x [X] y [Y] にする', arguments: { X: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }, Y: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 } } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'setSize', text: '最後のUIの幅 [W] 高さ [H] にする', arguments: { W: { type: Scratch.ArgumentType.NUMBER, defaultValue: 100 }, H: { type: Scratch.ArgumentType.NUMBER, defaultValue: 40 } } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'setColor', text: '最後のUIの [PROP] を [COLOR] にする', arguments: {
-                        PROP: { type: Scratch.ArgumentType.STRING, menu: 'colorMenu' }, COLOR: { type: Scratch.ArgumentType.COLOR, defaultValue: '#ffffff' }
-                    } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'setRadius', text: '最後のUIの角丸を [RADIUS] にする', arguments: { RADIUS: { type: Scratch.ArgumentType.NUMBER, defaultValue: 10 } } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'setVisible', text: '最後のUIを [VISIBLE] にする', arguments: { VISIBLE: { type: Scratch.ArgumentType.STRING, menu: 'visibleMenu' } } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'deleteUI', text: 'UI [ID] を削除', arguments: { ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'ui1' } } },
-                    { blockType: Scratch.BlockType.COMMAND, opcode: 'frontUI', text: 'UI [ID] を最前面にする', arguments: { ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'ui1' } } },
-                    '---',
-                    { blockType: Scratch.BlockType.REPORTER, opcode: 'lastId', text: '最後のUIのID' },
-                    { blockType: Scratch.BlockType.REPORTER, opcode: 'uiCount', text: 'UIの数' },
-                    { blockType: Scratch.BlockType.BOOLEAN, opcode: 'clicked', text: 'UI [ID] が押された？', arguments: { ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'ui1' } } },
-                    { blockType: Scratch.BlockType.REPORTER, opcode: 'inputValue', text: '入力欄 [ID] の文字', arguments: { ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'ui1' } } },
-                    { blockType: Scratch.BlockType.REPORTER, opcode: 'mouseX', text: 'UIマウス x' },
-                    { blockType: Scratch.BlockType.REPORTER, opcode: 'mouseY', text: 'UIマウス y' },
-                    { blockType: Scratch.BlockType.REPORTER, opcode: 'osState', text: 'OSの状態' },
-                    { blockType: Scratch.BlockType.BOOLEAN, opcode: 'isRunning', text: 'OSは起動中？' }
-                ],
-                menus: {
-                    cornerMenu: { acceptReporters: false, items: ['丸く', '角'] },
-                    colorMenu: { acceptReporters: false, items: ['文字色', '背景色', '枠線色'] },
-                    visibleMenu: { acceptReporters: false, items: ['表示', '非表示'] }
-                }
+                    {
+                        blockType: Scratch.BlockType.REPORTER,
+                        opcode: 'osState',
+                        text: 'OSの状態'
+                    },
+                    {
+                        blockType: Scratch.BlockType.REPORTER,
+                        opcode: 'osFrame',
+                        text: 'OSのフレーム数'
+                    },
+                    {
+                        blockType: Scratch.BlockType.BOOLEAN,
+                        opcode: 'isRunning',
+                        text: 'OSは起動中？'
+                    }
+                ]
             };
         }
 
         installStyles() {
-            if (document.getElementById('turboos-cms-v2-style')) return;
+            if (document.getElementById('turboos-stage-style')) return;
+
             const style = document.createElement('style');
-            style.id = 'turboos-cms-v2-style';
+            style.id = 'turboos-stage-style';
             style.textContent = `
-                #turboos-cms-v2-overlay { position:absolute; pointer-events:none; overflow:hidden; z-index:20; }
-                #turboos-cms-v2-overlay canvas { display:block; width:100%; height:100%; }
-                #turboos-cms-v2-input-layer { position:absolute; inset:0; pointer-events:none; }
-                .turboos-cms-v2-input { position:absolute; box-sizing:border-box; margin:0; padding:6px 8px; outline:none; font:14px sans-serif; pointer-events:auto; }
+                #turboos-stage-overlay {
+                    position: absolute;
+                    pointer-events: none;
+                    z-index: 20;
+                    overflow: hidden;
+                }
+                #turboos-stage-overlay canvas {
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+                }
             `;
             document.head.appendChild(style);
         }
@@ -118,206 +99,332 @@
         ensureOverlay() {
             const canvas = Scratch.renderer && Scratch.renderer.canvas;
             if (!canvas || !canvas.parentElement) return false;
-            if (canvas === this.stageCanvas && this.overlay) return true;
+
+            if (canvas === this.stageCanvas && this.overlay) {
+                return true;
+            }
+
             this.stageCanvas = canvas;
-            if (this.overlay) this.overlay.remove();
+
+            if (this.overlay) {
+                this.overlay.remove();
+            }
+
             const parent = canvas.parentElement;
-            if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+            if (getComputedStyle(parent).position === 'static') {
+                parent.style.position = 'relative';
+            }
+
             this.overlay = document.createElement('div');
-            this.overlay.id = 'turboos-cms-v2-overlay';
+            this.overlay.id = 'turboos-stage-overlay';
             this.overlay.style.display = 'none';
-            this.overlay.innerHTML = '<canvas></canvas><div id="turboos-cms-v2-input-layer"></div>';
+
+            this.canvas = document.createElement('canvas');
+            this.overlay.appendChild(this.canvas);
             parent.appendChild(this.overlay);
-            this.canvas = this.overlay.querySelector('canvas');
+
             this.ctx = this.canvas.getContext('2d');
-            this.overlay.addEventListener('pointerdown', e => this.pointer(e));
+
             if (typeof ResizeObserver !== 'undefined') {
-                this.resizeObserver = new ResizeObserver(() => this.syncSize());
+                if (this.resizeObserver) {
+                    this.resizeObserver.disconnect();
+                }
+                this.resizeObserver = new ResizeObserver(() => {
+                    this.syncStageSize();
+                });
                 this.resizeObserver.observe(canvas);
             }
-            this.syncSize();
+
+            this.syncStageSize();
             return true;
         }
 
-        syncSize() {
-            if (!this.stageCanvas || !this.overlay || !this.canvas) return;
-            const r = this.stageCanvas.getBoundingClientRect();
-            const p = this.stageCanvas.parentElement.getBoundingClientRect();
-            this.overlay.style.left = `${r.left - p.left}px`;
-            this.overlay.style.top = `${r.top - p.top}px`;
-            this.overlay.style.width = `${r.width}px`;
-            this.overlay.style.height = `${r.height}px`;
+        syncStageSize() {
+            if (!this.stageCanvas || !this.overlay || !this.canvas || !this.ctx) {
+                return;
+            }
+
+            const rect = this.stageCanvas.getBoundingClientRect();
+            const parentRect = this.stageCanvas.parentElement.getBoundingClientRect();
+
+            this.overlay.style.left = `${rect.left - parentRect.left}px`;
+            this.overlay.style.top = `${rect.top - parentRect.top}px`;
+            this.overlay.style.width = `${rect.width}px`;
+            this.overlay.style.height = `${rect.height}px`;
+
             const dpr = Math.max(1, window.devicePixelRatio || 1);
-            this.canvas.width = Math.max(1, Math.round(r.width * dpr));
-            this.canvas.height = Math.max(1, Math.round(r.height * dpr));
-            this.ctx.setTransform((r.width * dpr) / this.stageWidth, 0, 0, (r.height * dpr) / this.stageHeight, (r.width * dpr) / 2, (r.height * dpr) / 2);
+            this.canvas.width = Math.max(1, Math.round(rect.width * dpr));
+            this.canvas.height = Math.max(1, Math.round(rect.height * dpr));
+
+            this.ctx.setTransform(
+                (rect.width * dpr) / this.stageWidth,
+                0,
+                0,
+                (rect.height * dpr) / this.stageHeight,
+                (rect.width * dpr) / 2,
+                (rect.height * dpr) / 2
+            );
+
             this.render();
-            this.updateInputs();
         }
 
-        startLoop() {
+        startRenderLoop() {
+            if (this.animationFrame) return;
+
             const loop = () => {
                 this.animationFrame = requestAnimationFrame(loop);
-                if (this.running) { this.render(); this.updateInputs(); }
+
+                // 描画だけは常時行う。
+                // OS内部の進行は stepFrame() でのみ進む。
+                if (this.running || this.state !== 'off') {
+                    this.render();
+                }
             };
+
             this.animationFrame = requestAnimationFrame(loop);
         }
 
-        stageX(clientX) {
-            const r = this.stageCanvas.getBoundingClientRect();
-            return ((clientX - r.left) / r.width) * this.stageWidth - this.stageWidth / 2;
+        clear() {
+            if (!this.ctx) return;
+
+            this.ctx.save();
+            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.restore();
         }
 
-        stageY(clientY) {
-            const r = this.stageCanvas.getBoundingClientRect();
-            return this.stageHeight / 2 - ((clientY - r.top) / r.height) * this.stageHeight;
+        roundedRect(x, y, w, h, r) {
+            const radius = Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2));
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(x + radius, y);
+            this.ctx.arcTo(x + w, y, x + w, y + h, radius);
+            this.ctx.arcTo(x + w, y + h, x, y + h, radius);
+            this.ctx.arcTo(x, y + h, x, y, radius);
+            this.ctx.arcTo(x, y, x + w, y, radius);
+            this.ctx.closePath();
         }
 
-        radius(v, w, h) {
-            return String(v) === '丸く' ? Math.min(w, h) / 2 : 0;
-        }
-
-        create(type, props) {
-            const id = `ui${this.nextId++}`;
-            const item = {
-                id, type, x: 0, y: 0, width: 100, height: 40,
-                text: '', fontSize: 20, textColor: '#ffffff',
-                backgroundColor: '#202938', borderColor: '#5b6b86', borderWidth: 1,
-                radius: 0, visible: true, z: this.ui.size,
-                titleHeight: 26, value: '', clicked: false,
-                ...props
-            };
-            this.ui.set(id, item);
-            this.lastUI = id;
-            this.render();
-            this.updateInputs();
-            return id;
-        }
-
-        addText(a) { return this.create('text', { text: String(a.TEXT ?? ''), x: Number(a.X) || 0, y: Number(a.Y) || 0, fontSize: Math.max(1, Number(a.SIZE) || 24), width: 1, height: 1, borderWidth: 0, backgroundColor: 'transparent' }); }
-        addRect(a) { const w = Math.max(1, Number(a.W) || 120), h = Math.max(1, Number(a.H) || 60); return this.create('rectangle', { x: Number(a.X) || 0, y: Number(a.Y) || 0, width: w, height: h, radius: this.radius(a.ROUND, w, h) }); }
-        addButton(a) { const w = Math.max(1, Number(a.W) || 100), h = Math.max(1, Number(a.H) || 36); return this.create('button', { text: String(a.TEXT ?? 'OK'), x: Number(a.X) || 0, y: Number(a.Y) || 0, width: w, height: h, radius: this.radius(a.ROUND, w, h), backgroundColor: '#2563eb' }); }
-        addInput(a) { const w = Math.max(1, Number(a.W) || 160), h = Math.max(1, Number(a.H) || 34); return this.create('input', { x: Number(a.X) || 0, y: Number(a.Y) || 0, width: w, height: h, radius: this.radius(a.ROUND, w, h), backgroundColor: '#111827' }); }
-        addWindow(a) { const w = Math.max(1, Number(a.W) || 300), h = Math.max(1, Number(a.H) || 180); return this.create('window', { text: String(a.TITLE ?? 'Window'), x: Number(a.X) || 0, y: Number(a.Y) || 20, width: w, height: h, radius: this.radius(a.ROUND, w, h) }); }
-
-        clear() { this.ui.clear(); this.inputElements.forEach(el => el.remove()); this.inputElements.clear(); this.lastUI = ''; this.render(); }
-        setBackground(a) { this.background = String(a.COLOR || '#101827'); this.render(); }
-        setText(a) { const u = this.ui.get(this.lastUI); if (u) u.text = String(a.TEXT ?? ''); }
-        setPosition(a) { const u = this.ui.get(this.lastUI); if (u) { u.x = Number(a.X) || 0; u.y = Number(a.Y) || 0; } }
-        setSize(a) { const u = this.ui.get(this.lastUI); if (u) { u.width = Math.max(1, Number(a.W) || 1); u.height = Math.max(1, Number(a.H) || 1); } }
-        setColor(a) { const u = this.ui.get(this.lastUI); if (!u) return; const c = String(a.COLOR || '#fff'); const p = String(a.PROP); if (p === '文字色') u.textColor = c; else if (p === '背景色') u.backgroundColor = c; else u.borderColor = c; }
-        setRadius(a) { const u = this.ui.get(this.lastUI); if (u) u.radius = Math.max(0, Number(a.RADIUS) || 0); }
-        setVisible(a) { const u = this.ui.get(this.lastUI); if (u) u.visible = String(a.VISIBLE) === '表示'; }
-        deleteUI(a) { const id = String(a.ID || ''); this.ui.delete(id); const el = this.inputElements.get(id); if (el) { el.remove(); this.inputElements.delete(id); } this.render(); }
-        frontUI(a) { const u = this.ui.get(String(a.ID || '')); if (!u) return; const max = Math.max(-1, ...Array.from(this.ui.values()).map(x => x.z)); u.z = max + 1; }
-
-        pointer(e) {
-            if (!this.running) return;
-            const x = this.stageX(e.clientX), y = this.stageY(e.clientY);
-            this.lastX = x; this.lastY = y;
-            const sorted = [...this.ui.values()].filter(u => u.visible).sort((a,b) => a.z - b.z).reverse();
-            for (const u of sorted) {
-                if (u.type === 'text') continue;
-                const left = u.x, top = u.y, right = u.x + u.width, bottom = u.y - u.height;
-                if (x >= left && x <= right && y <= top && y >= bottom) {
-                    if (u.type === 'button') { u.clicked = true; this.lastClicked = u.id; }
-                    if (u.type === 'input') { const el = this.inputElements.get(u.id); if (el) el.focus(); }
-                    break;
-                }
-            }
-        }
-
-        drawRoundRect(ctx, x, y, w, h, r) {
-            const rr = Math.max(0, Math.min(r, Math.abs(w)/2, Math.abs(h)/2));
-            ctx.beginPath();
-            ctx.moveTo(x + rr, y);
-            ctx.lineTo(x + w - rr, y);
-            ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
-            ctx.lineTo(x + w, y + h - rr);
-            ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-            ctx.lineTo(x + rr, y + h);
-            ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
-            ctx.lineTo(x, y + rr);
-            ctx.quadraticCurveTo(x, y, x + rr, y);
-            ctx.closePath();
+        text(text, x, y, size, color = '#ffffff', align = 'left') {
+            this.ctx.fillStyle = color;
+            this.ctx.font = `${size}px system-ui, sans-serif`;
+            this.ctx.textAlign = align;
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(String(text), x, y);
         }
 
         render() {
-            if (!this.ctx) return;
-            const c = this.ctx;
-            c.clearRect(-this.stageWidth/2, -this.stageHeight/2, this.stageWidth, this.stageHeight);
-            c.fillStyle = this.background;
-            c.fillRect(-this.stageWidth/2, -this.stageHeight/2, this.stageWidth, this.stageHeight);
-            const items = [...this.ui.values()].filter(u => u.visible).sort((a,b) => a.z - b.z);
-            c.textBaseline = 'middle';
-            for (const u of items) this.drawItem(c, u);
-        }
+            if (!this.ctx || !this.canvas || !this.overlay) {
+                this.ensureOverlay();
+                if (!this.ctx) return;
+            }
 
-        drawItem(c, u) {
-            if (u.type === 'text') {
-                c.font = `${u.fontSize}px sans-serif`;
-                c.fillStyle = u.textColor;
-                c.fillText(u.text, u.x, u.y);
+            this.overlay.style.display = this.state === 'off' ? 'none' : 'block';
+
+            if (this.state === 'off') {
+                this.clear();
                 return;
             }
-            c.save();
-            const top = u.y - u.height;
-            this.drawRoundRect(c, u.x, top, u.width, u.height, u.radius);
-            c.fillStyle = u.backgroundColor;
-            c.fill();
-            c.lineWidth = u.borderWidth;
-            if (u.borderWidth > 0) { c.strokeStyle = u.borderColor; c.stroke(); }
-            if (u.type === 'window') {
-                c.fillStyle = 'rgba(255,255,255,.09)'; c.fillRect(u.x, top, u.width, Math.min(26, u.height));
-                c.fillStyle = u.textColor; c.font = '14px sans-serif'; c.fillText(u.text, u.x + 10, top + 13);
-            } else if (u.type === 'button') {
-                c.fillStyle = u.textColor; c.font = `${Math.max(12, Math.min(20, u.height/2))}px sans-serif`; c.textAlign = 'center'; c.fillText(u.text, u.x + u.width/2, top + u.height/2); c.textAlign = 'left';
+
+            this.clear();
+
+            const ctx = this.ctx;
+            const w = this.stageWidth;
+            const h = this.stageHeight;
+
+            ctx.fillStyle = this.background;
+            ctx.fillRect(-w / 2, -h / 2, w, h);
+
+            if (this.state === 'boot') {
+                this.renderBoot();
+                return;
             }
-            c.restore();
+
+            if (this.state === 'kernel') {
+                this.renderKernel();
+                return;
+            }
+
+            if (this.state === 'services') {
+                this.renderServices();
+                return;
+            }
+
+            this.renderDesktop();
         }
 
-        updateInputs() {
-            if (!this.stageCanvas || !this.overlay) return;
-            const layer = this.overlay.querySelector('#turboos-cms-v2-input-layer');
-            if (!layer) return;
-            const r = this.stageCanvas.getBoundingClientRect();
-            const wanted = new Set();
-            for (const u of this.ui.values()) {
-                if (u.type !== 'input') continue;
-                wanted.add(u.id);
-                let el = this.inputElements.get(u.id);
-                if (!el) {
-                    el = document.createElement('input');
-                    el.className = 'turboos-cms-v2-input';
-                    el.addEventListener('input', () => { u.value = el.value; });
-                    this.inputElements.set(u.id, el);
-                    layer.appendChild(el);
-                }
-                const sx = r.width / this.stageWidth;
-                const sy = r.height / this.stageHeight;
-                el.style.left = `${(u.x + this.stageWidth/2) * sx}px`;
-                el.style.top = `${(this.stageHeight/2 - u.y) * sy - u.height * sy}px`;
-                el.style.width = `${u.width * sx}px`;
-                el.style.height = `${u.height * sy}px`;
-                el.style.borderRadius = `${u.radius * Math.min(sx, sy)}px`;
-                el.style.display = (this.running && u.visible) ? 'block' : 'none';
-                el.value = u.value;
+        renderBoot() {
+            const ctx = this.ctx;
+
+            this.text('TurboOS', 0, -60, 42, '#ffffff', 'center');
+            this.text('Firmware', 0, -18, 16, '#93c5fd', 'center');
+
+            const items = [
+                'Checking virtual CPU...',
+                'Checking virtual memory...',
+                'Checking display device...',
+                'Checking input device...'
+            ];
+
+            const count = Math.min(items.length, Math.floor(this.frame / 8) + 1);
+
+            for (let i = 0; i < count; i++) {
+                this.text(`[ OK ] ${items[i]}`, -150, 28 + i * 24, 13, '#cbd5e1');
             }
-            for (const [id, el] of this.inputElements) if (!wanted.has(id)) { el.remove(); this.inputElements.delete(id); }
+
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(-150, 145, 300, 8);
+
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillRect(-150, 145, Math.min(300, this.frame * 5), 8);
         }
 
-        startOS() { this.ensureOverlay(); this.running = true; this.overlay.style.display = 'block'; this.render(); this.updateInputs(); }
-        shutdown() { this.running = false; if (this.overlay) this.overlay.style.display = 'none'; this.inputElements.forEach(el => el.style.display = 'none'); }
-        restart() { this.shutdown(); setTimeout(() => this.startOS(), 120); }
-        lastId() { return this.lastUI; }
-        uiCount() { return this.ui.size; }
-        clicked(a) { const u = this.ui.get(String(a.ID || '')); if (!u || u.type !== 'button') return false; const v = !!u.clicked; u.clicked = false; return v; }
-        inputValue(a) { return this.ui.get(String(a.ID || ''))?.value || ''; }
-        mouseX() { return this.lastX; }
-        mouseY() { return this.lastY; }
-        osState() { return this.running ? 'running' : 'off'; }
-        isRunning() { return this.running; }
+        renderKernel() {
+            this.text('TurboOS', 0, -80, 40, '#ffffff', 'center');
+            this.text('Loading Kernel', 0, -38, 16, '#93c5fd', 'center');
+
+            const items = [
+                'Virtual CPU manager',
+                'Memory manager',
+                'Display driver',
+                'Input manager',
+                'System clock'
+            ];
+
+            const count = Math.min(items.length, Math.floor((this.frame - 32) / 6) + 1);
+
+            for (let i = 0; i < count; i++) {
+                this.text(`[ OK ] ${items[i]}`, -140, 10 + i * 25, 13, '#cbd5e1');
+            }
+        }
+
+        renderServices() {
+            this.text('TurboOS', 0, -75, 40, '#ffffff', 'center');
+            this.text('Starting system services', 0, -35, 16, '#93c5fd', 'center');
+
+            const items = [
+                'Window manager',
+                'Desktop shell',
+                'Event system',
+                'Virtual filesystem'
+            ];
+
+            const count = Math.min(items.length, Math.floor((this.frame - 64) / 7) + 1);
+
+            for (let i = 0; i < count; i++) {
+                this.text(`[ OK ] ${items[i]}`, -130, 12 + i * 26, 13, '#cbd5e1');
+            }
+        }
+
+        renderDesktop() {
+            const ctx = this.ctx;
+            const w = this.stageWidth;
+            const h = this.stageHeight;
+
+            // Desktop
+            const gradient = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+            gradient.addColorStop(0, '#182437');
+            gradient.addColorStop(1, '#08101d');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(-w / 2, -h / 2, w, h);
+
+            // Top bar
+            ctx.fillStyle = 'rgba(10, 15, 24, 0.92)';
+            ctx.fillRect(-w / 2, -h / 2, w, 28);
+
+            this.text('TurboOS', -220, -166, 13, '#f8fafc');
+            this.text('Desktop', -165, -166, 12, '#94a3b8');
+            this.text('frame ' + this.frame, 170, -166, 11, '#64748b');
+
+            // Icons
+            this.desktopIcon(-180, -90, '▣', 'System');
+            this.desktopIcon(-100, -90, '□', 'Files');
+            this.desktopIcon(-20, -90, '›_', 'Terminal');
+
+            // Welcome card
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+            this.roundedRect(-150, -25, 300, 135, 14);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+            ctx.stroke();
+
+            this.text('Welcome to TurboOS', 0, 5, 22, '#f8fafc', 'center');
+            this.text('Stage-based virtual operating system', 0, 36, 13, '#94a3b8', 'center');
+            this.text('The OS is running.', 0, 66, 13, '#60a5fa', 'center');
+
+            // Taskbar
+            ctx.fillStyle = 'rgba(10, 15, 24, 0.96)';
+            ctx.fillRect(-w / 2, h / 2 - 34, w, 34);
+
+            this.text('◈', -220, 143, 16, '#60a5fa', 'center');
+            this.text('TurboOS', -185, 143, 12, '#e2e8f0');
+            this.text('Virtual Desktop', 185, 143, 11, '#94a3b8', 'right');
+        }
+
+        desktopIcon(x, y, icon, label) {
+            const ctx = this.ctx;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+            this.roundedRect(x - 26, y - 25, 52, 52, 8);
+            ctx.fill();
+            this.text(icon, x, y - 2, 23, '#93c5fd', 'center');
+            this.text(label, x, y + 45, 11, '#e2e8f0', 'center');
+        }
+
+        startOS() {
+            if (this.running) return;
+
+            this.running = true;
+            this.state = 'boot';
+            this.frame = 0;
+            this.background = '#020617';
+            this.ensureOverlay();
+            this.render();
+        }
+
+        stepFrame() {
+            if (!this.running) return;
+
+            this.frame += 1;
+
+            if (this.frame < 32) {
+                this.state = 'boot';
+            } else if (this.frame < 64) {
+                this.state = 'kernel';
+            } else if (this.frame < 90) {
+                this.state = 'services';
+            } else {
+                this.state = 'desktop';
+                this.background = '#101827';
+            }
+
+            this.render();
+        }
+
+        restart() {
+            this.shutdown();
+            this.startOS();
+        }
+
+        shutdown() {
+            this.running = false;
+            this.state = 'off';
+            this.frame = 0;
+            this.render();
+        }
+
+        osState() {
+            return this.state;
+        }
+
+        osFrame() {
+            return this.frame;
+        }
+
+        isRunning() {
+            return this.running;
+        }
     }
 
-    Scratch.extensions.register(new TurboOSCMSv2());
+    Scratch.extensions.register(new TurboOS());
 })(Scratch);
