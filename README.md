@@ -6,7 +6,6 @@ Linux**風**であり、本物のLinuxではありません！
 `turbo-os-cms-v2.js` は現在、TurboWarp の**ステージを仮想ディスプレイ**として使う TurboOS のコア実装です。
 
 ### 現在の構成
-- UIをScratchブロックから個別に作るCMS方式は廃止
 - TurboWarpのステージへOS画面を直接描画
 - OSの起動・再起動・終了
 - OS内部の状態をフレーム単位で進行
